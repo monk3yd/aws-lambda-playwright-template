@@ -1,0 +1,27 @@
+# AWS Docker Image for Python
+
+FROM public.ecr.aws/lambda/python:3.11
+
+# create a dedicated group and user
+# RUN groupadd -r monk3yd && useradd -g monk3yd monk3yd
+
+# set ownership and permissions
+# RUN chown -R monk3yd:monk3yd ${LAMBDA_TASK_ROOT}
+
+# change to non-root user (some images already have a generic user)
+# USER monk3yd
+
+# Set environment variables
+ENV KEY=RFTL
+
+# Copy function code
+COPY ./handler/main.py ${LAMBDA_TASK_ROOT}
+
+# Copy requirements.txt
+COPY requirements.txt ${LAMBDA_TASK_ROOT}
+
+# Install the specified packages
+RUN pip install -r requirements.txt
+
+# Set the CMD to your handler (could also be done as a parameter override outside of the Dockerfile)
+CMD [ "main.lambda_handler" ]

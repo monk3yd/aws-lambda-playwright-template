@@ -1,0 +1,42 @@
+# Ubuntu Docker Image
+FROM public.ecr.aws/docker/library/ubuntu:22.04
+
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    python3-pip && \
+    apt-get clean
+
+ARG FUNCTION_DIR="/home/monk3yd/"
+RUN mkdir -p ${FUNCTION_DIR}
+
+# create a dedicated group and user
+# RUN groupadd -r monk3yd && useradd -g monk3yd monk3yd
+
+# set ownership and permissions
+# RUN chown -R monk3yd:monk3yd ${FUNCTION_DIR}
+
+# change to non-root user (some images already have a generic user)
+# USER monk3yd
+
+# Set environment variables
+ENV KEY=RFTL
+
+COPY requirements.txt ${FUNCTION_DIR}
+RUN pip3 install --no-cache-dir -r ${FUNCTION_DIR}/requirements.txt
+
+# Copy function code
+COPY ./handler/* ${FUNCTION_DIR}
+
+# Install Lambda Runtime Interface Client for Python
+RUN python3 -m pip install awslambdaric --target ${FUNCTION_DIR}
+
+WORKDIR ${FUNCTION_DIR}
+
+# (Optional) Add Lambda Runtime Interface Emulator and use a script in the ENTRYPOINT for simpler local runs
+ADD https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie /usr/bin/aws-lambda-rie
+COPY docker/entrypoint.sh /
+RUN chmod 755 /usr/bin/aws-lambda-rie /entrypoint.sh
+ENTRYPOINT [ "/entrypoint.sh" ]
+
+CMD [ "main.lambda_handler" ]

@@ -1,0 +1,14 @@
+# Ignore git and github related folders
+.git
+.github
+
+# Ignore markdown files
+*.md
+
+# Sensitive files
+# TODO
+
+# Project setup scripts
+scripts
+
+

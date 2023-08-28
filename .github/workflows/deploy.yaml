@@ -1,0 +1,73 @@
+name: Deploy code to lambda
+
+on:
+  push:
+    branches:
+      - main
+      - experimental
+
+env:
+  # AWS
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  REGION_NAME: ${{ secrets.REGION_NAME }}
+  IMAGE_NAME: ${{ secrets.PROJECT_NAME }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # runs-on: ubuntu-20.04
+
+    # Set IMAGE_TAG variable
+    steps:
+    - name: Set IMAGE_TAG variable
+      run: |
+        if [ "$GITHUB_REF" == "refs/heads/experimental" ]; then
+          echo "IMAGE_TAG=experimental" >> $GITHUB_ENV
+        else
+          echo "IMAGE_TAG=main" >> $GITHUB_ENV
+        fi
+
+    # Source github code
+    - uses: actions/checkout@v3
+
+    # AWS CLI
+    - name: Configure AWS CLI
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-pip
+        pip3 install awscli
+        aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}
+        aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}
+        aws configure set default.region ${REGION_NAME}
+
+    # Docker & ECR
+    - name: Build and push Docker image to ECR
+      run: |
+        # Login
+        aws ecr get-login-password --region ${REGION_NAME} | docker login --username AWS --password-stdin --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${REGION_NAME}.amazonaws.com
+        # Build docker image
+        docker build -t ${IMAGE_NAME} -f docker/Dockerfile .
+        # Link docker image to ECR
+        docker tag ${IMAGE_NAME} ${AWS_ACCOUNT_ID}.dkr.ecr.${REGION_NAME}.amazonaws.com/${IMAGE_NAME}:${{ env.IMAGE_TAG }}
+        # Push docker image to ECR
+        docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${REGION_NAME}.amazonaws.com/${IMAGE_NAME}:${{ env.IMAGE_TAG }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set IMAGE_TAG variable
+      run: |
+        if [ "$GITHUB_REF" == "refs/heads/experimental" ]; then
+          echo "IMAGE_TAG=experimental" >> $GITHUB_ENV
+          echo "LAMBDA_NAME=${IMAGE_NAME}-experimental" >> $GITHUB_ENV
+        else
+          echo "IMAGE_TAG=main" >> $GITHUB_ENV
+          echo "LAMBDA_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
+        fi
+
+    - name: Deploy ECR image to Lambda
+      run: |
+        aws lambda update-function-code --function-name ${{ env.LAMBDA_NAME }} --image-uri ${AWS_ACCOUNT_ID}.dkr.ecr.${REGION_NAME}.amazonaws.com/${IMAGE_NAME}:${{ env.IMAGE_TAG }} --region ${REGION_NAME}
